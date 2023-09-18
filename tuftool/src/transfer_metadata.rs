@@ -7,7 +7,6 @@ use crate::source::parse_key_source;
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use snafu::ResultExt;
-use std::fs::File;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use tough::editor::RepositoryEditor;
@@ -82,7 +81,7 @@ WARNING: `--allow-expired-repo` was passed; this is unsafe and will not establis
 }
 
 impl TransferMetadataArgs {
-    pub(crate) fn run(&self) -> Result<()> {
+    pub(crate) async fn run(&self) -> Result<()> {
         let current_root = &self.current_root;
         let new_root = &self.new_root;
 
@@ -94,17 +93,21 @@ impl TransferMetadataArgs {
             ExpirationEnforcement::Safe
         };
         let current_repo = RepositoryLoader::new(
-            File::open(current_root).context(error::OpenRootSnafu {
-                path: &current_root,
-            })?,
+            &tokio::fs::read(current_root)
+                .await
+                .context(error::OpenRootSnafu {
+                    path: &current_root,
+                })?,
             self.metadata_base_url.clone(),
             self.targets_base_url.clone(),
         )
         .expiration_enforcement(expiration_enforcement)
         .load()
+        .await
         .context(error::RepoLoadSnafu)?;
 
         let mut editor = RepositoryEditor::new(new_root)
+            .await
             .context(error::EditorCreateSnafu { path: &new_root })?;
 
         editor
@@ -124,11 +127,15 @@ impl TransferMetadataArgs {
                 .context(error::DelegationStructureSnafu)?;
         }
 
-        let signed_repo = editor.sign(&self.keys).context(error::SignRepoSnafu)?;
+        let signed_repo = editor
+            .sign(&self.keys)
+            .await
+            .context(error::SignRepoSnafu)?;
 
         let metadata_dir = &self.outdir.join("metadata");
         signed_repo
             .write(metadata_dir)
+            .await
             .context(error::WriteRepoSnafu {
                 directory: metadata_dir,
             })?;

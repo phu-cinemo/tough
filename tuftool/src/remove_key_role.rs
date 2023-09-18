@@ -52,27 +52,30 @@ pub(crate) struct RemoveKeyArgs {
 }
 
 impl RemoveKeyArgs {
-    pub(crate) fn run(&self, role: &str) -> Result<()> {
-        let repository = load_metadata_repo(&self.root, self.metadata_base_url.clone())?;
+    pub(crate) async fn run(&self, role: &str) -> Result<()> {
+        let repository = load_metadata_repo(&self.root, self.metadata_base_url.clone()).await?;
         self.remove_key(
             role,
             TargetsEditor::from_repo(repository, role)
                 .context(error::EditorFromRepoSnafu { path: &self.root })?,
         )
+        .await
     }
 
     /// Removes keys from a delegated role using targets Editor
-    fn remove_key(&self, role: &str, mut editor: TargetsEditor) -> Result<()> {
+    async fn remove_key(&self, role: &str, mut editor: TargetsEditor) -> Result<()> {
         let updated_role = editor
             .remove_key(&self.remove, self.delegated_role.as_deref())
             .context(error::LoadMetadataSnafu)?
             .version(self.version)
             .expires(self.expires)
             .sign(&self.keys)
+            .await
             .context(error::SignRepoSnafu)?;
         let metadata_destination_out = &self.outdir.join("metadata");
         updated_role
             .write(metadata_destination_out, false)
+            .await
             .context(error::WriteRolesSnafu {
                 roles: [role.to_string()].to_vec(),
             })?;

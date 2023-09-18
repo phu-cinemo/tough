@@ -37,19 +37,21 @@ pub(crate) struct CreateRoleArgs {
 }
 
 impl CreateRoleArgs {
-    pub(crate) fn run(&self, role: &str) -> Result<()> {
+    pub(crate) async fn run(&self, role: &str) -> Result<()> {
         // create the new role
         let new_role = TargetsEditor::new(role)
             .version(self.version)
             .expires(self.expires)
-            .add_key(key_hash_map(&self.keys), None)
+            .add_key(key_hash_map(&self.keys).await, None)
             .context(error::DelegationStructureSnafu)?
             .sign(&self.keys)
+            .await
             .context(error::SignRepoSnafu)?;
         // write the new role
         let metadata_destination_out = &self.outdir.join("metadata");
         new_role
             .write(metadata_destination_out, false)
+            .await
             .context(error::WriteRolesSnafu {
                 roles: [role.to_string()].to_vec(),
             })?;
@@ -57,10 +59,10 @@ impl CreateRoleArgs {
     }
 }
 
-fn key_hash_map(keys: &[Box<dyn KeySource>]) -> HashMap<Decoded<Hex>, Key> {
+async fn key_hash_map(keys: &[Box<dyn KeySource>]) -> HashMap<Decoded<Hex>, Key> {
     let mut key_pairs = HashMap::new();
     for source in keys {
-        let key_pair = source.as_sign().unwrap().tuf_key();
+        let key_pair = source.as_sign().await.unwrap().tuf_key();
         key_pairs.insert(key_pair.key_id().unwrap().clone(), key_pair.clone());
     }
     key_pairs

@@ -3,7 +3,8 @@
 
 use assert_cmd::Command;
 use chrono::{Duration, Utc};
-use std::io::Read;
+use futures::TryStreamExt;
+use futures_core::Stream;
 use std::path::{Path, PathBuf};
 use url::Url;
 
@@ -23,12 +24,21 @@ pub fn dir_url<P: AsRef<Path>>(path: P) -> Url {
     Url::from_directory_path(path).unwrap()
 }
 
-/// Returns a vector of bytes from any object with the Read trait
+/// Returns a vector of bytes from any stream of byte results
 #[allow(unused)]
-pub fn read_to_end<R: Read>(mut reader: R) -> Vec<u8> {
-    let mut v = Vec::new();
-    reader.read_to_end(&mut v).unwrap();
-    v
+pub async fn read_to_end<S, T, E>(mut stream: S) -> Vec<u8>
+where
+    S: Stream<Item = Result<T, E>> + Send,
+    T: AsRef<[u8]>,
+    E: std::error::Error,
+{
+    stream
+        .try_fold(Vec::new(), |mut acc, bytes| {
+            acc.extend(bytes.as_ref());
+            std::future::ready(Ok(acc))
+        })
+        .await
+        .unwrap()
 }
 
 /// Creates a repository with expired timestamp metadata.

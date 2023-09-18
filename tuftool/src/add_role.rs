@@ -85,17 +85,19 @@ pub(crate) struct AddRoleArgs {
 }
 
 impl AddRoleArgs {
-    pub(crate) fn run(&self, role: &str) -> Result<()> {
+    pub(crate) async fn run(&self, role: &str) -> Result<()> {
         // load the repo
-        let repository = load_metadata_repo(&self.root, self.metadata_base_url.clone())?;
+        let repository = load_metadata_repo(&self.root, self.metadata_base_url.clone()).await?;
         // if sign_all use Repository Editor to sign the entire repo if not use targets editor
         if self.sign_all {
             // Add a role using a `RepositoryEditor`
             self.with_repo_editor(
                 role,
                 RepositoryEditor::from_repo(&self.root, repository)
+                    .await
                     .context(error::EditorFromRepoSnafu { path: &self.root })?,
             )
+            .await
         } else {
             // Add a role using a `TargetsEditor`
             self.add_role(
@@ -103,12 +105,13 @@ impl AddRoleArgs {
                 TargetsEditor::from_repo(repository, role)
                     .context(error::EditorFromRepoSnafu { path: &self.root })?,
             )
+            .await
         }
     }
 
     #[allow(clippy::option_if_let_else)]
     /// Adds a role to metadata using targets Editor
-    fn add_role(&self, role: &str, mut editor: TargetsEditor) -> Result<()> {
+    async fn add_role(&self, role: &str, mut editor: TargetsEditor) -> Result<()> {
         let paths = if let Some(paths) = &self.paths {
             PathSet::Paths(paths.clone())
         } else if let Some(path_hash_prefixes) = &self.path_hash_prefixes {
@@ -125,14 +128,17 @@ impl AddRoleArgs {
                 self.threshold,
                 None,
             )
+            .await
             .context(error::LoadMetadataSnafu)?
             .version(self.version)
             .expires(self.expires)
             .sign(&self.keys)
+            .await
             .context(error::SignRepoSnafu)?;
         let metadata_destination_out = &self.outdir.join("metadata");
         updated_role
             .write(metadata_destination_out, false)
+            .await
             .context(error::WriteRolesSnafu {
                 roles: [self.delegatee.clone(), role.to_string()].to_vec(),
             })?;
@@ -142,7 +148,7 @@ impl AddRoleArgs {
 
     #[allow(clippy::option_if_let_else)]
     /// Adds a role to metadata using repo Editor
-    fn with_repo_editor(&self, role: &str, mut editor: RepositoryEditor) -> Result<()> {
+    async fn with_repo_editor(&self, role: &str, mut editor: RepositoryEditor) -> Result<()> {
         // Since we are using repo editor we will sign snapshot and timestamp
         // Check to make sure all versions and expirations are present
         let snapshot_version = self.snapshot_version.context(error::MissingSnafu {
@@ -172,6 +178,7 @@ impl AddRoleArgs {
             .targets_expires(self.expires)
             .context(error::DelegationStructureSnafu)?
             .sign_targets_editor(&self.keys)
+            .await
             .context(error::DelegateeNotFoundSnafu {
                 role: role.to_string(),
             })?;
@@ -190,6 +197,7 @@ impl AddRoleArgs {
                 self.threshold,
                 None,
             )
+            .await
             .context(error::LoadMetadataSnafu)?
             .targets_version(self.version)
             .context(error::DelegationStructureSnafu)?
@@ -200,10 +208,14 @@ impl AddRoleArgs {
             .timestamp_version(timestamp_version)
             .timestamp_expires(timestamp_expires);
 
-        let signed_repo = editor.sign(&self.keys).context(error::SignRepoSnafu)?;
+        let signed_repo = editor
+            .sign(&self.keys)
+            .await
+            .context(error::SignRepoSnafu)?;
         let metadata_destination_out = &self.outdir.join("metadata");
         signed_repo
             .write(metadata_destination_out)
+            .await
             .context(error::WriteRolesSnafu {
                 roles: [self.delegatee.clone(), role.to_string()].to_vec(),
             })?;
