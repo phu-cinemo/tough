@@ -10,12 +10,12 @@ pub(crate) async fn build_client_kms(profile: Option<&str>) -> KmsClient {
     let config = aws_config::from_env();
     let client_config = if let Some(profile) = profile {
         let region = DefaultRegionChain::builder()
-            .profile_name(&profile)
+            .profile_name(profile)
             .build()
             .region()
             .await;
         let creds = DefaultCredentialsChain::builder()
-            .profile_name(&profile)
+            .profile_name(profile)
             .region(region.clone())
             .build()
             .await;

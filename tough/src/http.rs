@@ -224,7 +224,7 @@ impl RetryStream {
             // Error while streaming the response body. Try to recover.
             Poll::Ready(Some(Err(err))) => match ErrorClass::from(err) {
                 ErrorClass::Fatal(e) => self.poll_err(e),
-                ErrorClass::FileNotFound(e) => self.poll_err(e),
+                ErrorClass::FileNotFound(_) => unreachable!("streaming the response body already"),
                 ErrorClass::Retryable(e) => {
                     if self.may_retry() {
                         match self.poll_new_request(cx) {
@@ -392,7 +392,7 @@ fn fetch_with_retries(r: RetryState, cs: &HttpTransportBuilder, url: &Url) -> Re
 
     RetryStream {
         retry_state: r,
-        settings: cs.clone(),
+        settings: *cs,
         url: url.clone(),
         request: RequestState::None,
         done: false,

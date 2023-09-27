@@ -98,7 +98,7 @@ impl Sign for RsaKeyPair {
         rng: &(dyn SecureRandom + Sync),
     ) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync + 'static>> {
         let mut signature = vec![0; self.public_modulus_len()];
-        self.sign(&ring::signature::RSA_PSS_SHA256, &*rng, msg, &mut signature)
+        self.sign(&ring::signature::RSA_PSS_SHA256, rng, msg, &mut signature)
             .context(error::SignSnafu)?;
         Ok(signature)
     }
